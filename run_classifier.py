@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import math
 import os
 import time
 from albert import classifier_utils
@@ -144,6 +145,10 @@ flags.DEFINE_string(
     "export_dir", None,
     "The directory where the exported SavedModel will be stored.")
 
+flags.DEFINE_float(
+    "threshold_to_export", float("nan"),
+    "The threshold value that should be used with the exported classifier.")
+
 
 def serving_input_receiver_fn():
   """Creates an input function for serving."""
@@ -169,6 +174,33 @@ def serving_input_receiver_fn():
 
   return tf.estimator.export.ServingInputReceiver(
       features=feature_map, receiver_tensors=serialized_example)
+
+
+def build_estimator(model_fn, run_config):
+  # If TPU is not available, this will fall back to normal Estimator on CPU
+  # or GPU.
+  return contrib_tpu.TPUEstimator(
+      use_tpu=FLAGS.use_tpu,
+      model_fn=model_fn,
+      config=run_config,
+      train_batch_size=FLAGS.train_batch_size,
+      eval_batch_size=FLAGS.eval_batch_size,
+      predict_batch_size=FLAGS.predict_batch_size,
+      export_to_tpu=False)  # http://yaqs/4707241341091840
+
+
+def build_estimator_with_threshold(model_fn, run_config, threshold):
+  """Builds an estimator which has the classifier threshold baked in."""
+
+  def new_model_fn(features, labels, mode, params):
+    spec = model_fn(features, labels, mode, params)
+    threshold_tensor = tf.constant(threshold, dtype=tf.float32)
+    default_serving_export = spec.export_outputs[
+        tf.saved_model.signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
+    default_serving_export.outputs["threshold"] = threshold_tensor
+    return spec
+
+  return build_estimator(new_model_fn, run_config)
 
 
 def main(_):
@@ -265,16 +297,7 @@ def main(_):
       hub_module=FLAGS.albert_hub_module_handle,
       optimizer=FLAGS.optimizer)
 
-  # If TPU is not available, this will fall back to normal Estimator on CPU
-  # or GPU.
-  estimator = contrib_tpu.TPUEstimator(
-      use_tpu=FLAGS.use_tpu,
-      model_fn=model_fn,
-      config=run_config,
-      train_batch_size=FLAGS.train_batch_size,
-      eval_batch_size=FLAGS.eval_batch_size,
-      predict_batch_size=FLAGS.predict_batch_size,
-      export_to_tpu=False)  # http://yaqs/4707241341091840
+  estimator = build_estimator(model_fn=model_fn, run_config=run_config)
 
   if FLAGS.do_train:
     cached_dir = FLAGS.cached_dir
@@ -516,6 +539,9 @@ def main(_):
     tf.gfile.MakeDirs(FLAGS.export_dir)
     checkpoint_path = os.path.join(FLAGS.output_dir, "model.ckpt-best")
     tf.logging.info("Starting to export model.")
+    if not math.isnan(FLAGS.threshold_to_export):
+      estimator = build_estimator_with_threshold(model_fn, run_config,
+                                                 FLAGS.threshold_to_export)
     subfolder = estimator.export_saved_model(
         export_dir_base=FLAGS.export_dir,
         serving_input_receiver_fn=serving_input_receiver_fn,
