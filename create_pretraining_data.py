@@ -109,6 +109,9 @@ flags.DEFINE_float(
     "Probability of creating sequences which are shorter than the "
     "maximum length.")
 
+flags.DEFINE_float("shuffle_examples", True,
+                   "Whether to shuffle the output examples.")
+
 
 class TrainingInstance(object):
   """A single training instance (sentence pair)."""
@@ -267,7 +270,8 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
 
   # Remove empty documents
   all_documents = [x for x in all_documents if x]
-  rng.shuffle(all_documents)
+  if FLAGS.shuffle_examples:
+    rng.shuffle(all_documents)
 
   vocab_words = list(tokenizer.vocab.keys())
   instances = []
@@ -284,7 +288,8 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
                 short_seq_prob, masked_lm_prob, max_predictions_per_seq,
                 vocab_words, rng))
 
-  rng.shuffle(instances)
+  if FLAGS.shuffle_examples:
+    rng.shuffle(instances)
   return instances
 
 
