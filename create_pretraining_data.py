@@ -78,6 +78,13 @@ flags.DEFINE_bool(
     "as the negative sample for next sentence prection, rather than using "
     "sentences from other random documents.")
 
+flags.DEFINE_integer(
+    "offset_stride", 0,
+    "Stride to take when offsetting into a document to generate different "
+    "slices of sentences. Part of data augmentation. Adjust dupe_factor to "
+    "compensate for this. Roughly speaking dupe_factor * offset_stride should "
+    "be kept constant. If set to <=0 then no offsetting is performed.")
+
 flags.DEFINE_integer("max_seq_length", 512, "Maximum sequence length.")
 
 flags.DEFINE_integer("ngram", 3, "Maximum number of ngrams to mask.")
@@ -222,8 +229,8 @@ def create_float_feature(values):
 
 
 def create_training_instances(input_files, tokenizer, max_seq_length,
-                              dupe_factor, short_seq_prob, masked_lm_prob,
-                              max_predictions_per_seq, rng):
+                              offset_stride, dupe_factor, short_seq_prob,
+                              masked_lm_prob, max_predictions_per_seq, rng):
   """Create `TrainingInstance`s from raw text."""
   all_documents = [[]]
 
@@ -242,7 +249,8 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
         if not line:
           break
         if FLAGS.spm_model_file:
-          line = tokenization.preprocess_text(line, lower=FLAGS.do_lower_case, keep_accents=FLAGS.keep_accents)
+          line = tokenization.preprocess_text(line, lower=FLAGS.do_lower_case,
+              keep_accents=FLAGS.keep_accents)
         else:
           line = line.strip()
 
@@ -260,18 +268,24 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
   vocab_words = list(tokenizer.vocab.keys())
   instances = []
   for _ in range(dupe_factor):
-    for document_index in range(len(all_documents)):
-      instances.extend(
-          create_instances_from_document(
-              all_documents, document_index, max_seq_length, short_seq_prob,
-              masked_lm_prob, max_predictions_per_seq, vocab_words, rng))
+    if offset <= 0:
+      offset_range = range(1)
+    else:
+      offset_range = range(0, max_seq_length, offset_stride)
+    for offset in offset_range:
+      for document_index in range(len(all_documents)):
+        instances.extend(
+            create_instances_from_document(
+                all_documents, document_index, offset, max_seq_length,
+                short_seq_prob, masked_lm_prob, max_predictions_per_seq,
+                vocab_words, rng))
 
   rng.shuffle(instances)
   return instances
 
 
 def create_instances_from_document(
-    all_documents, document_index, max_seq_length, short_seq_prob,
+    all_documents, document_index, offset, max_seq_length, short_seq_prob,
     masked_lm_prob, max_predictions_per_seq, vocab_words, rng):
   """Creates `TrainingInstance`s for a single document."""
   document = all_documents[document_index]
@@ -298,7 +312,7 @@ def create_instances_from_document(
   instances = []
   current_chunk = []
   current_length = 0
-  i = 0
+  i = offset
   while i < len(document):
     segment = document[i]
     current_chunk.append(segment)
@@ -640,9 +654,9 @@ def main(_):
 
   rng = random.Random(FLAGS.random_seed)
   instances = create_training_instances(
-      input_files, tokenizer, FLAGS.max_seq_length, FLAGS.dupe_factor,
-      FLAGS.short_seq_prob, FLAGS.masked_lm_prob, FLAGS.max_predictions_per_seq,
-      rng)
+      input_files, tokenizer, FLAGS.max_seq_length, FLAGS.offset_stride,
+      FLAGS.dupe_factor, FLAGS.short_seq_prob, FLAGS.masked_lm_prob,
+      FLAGS.max_predictions_per_seq, rng)
 
   tf.logging.info("number of instances: %i", len(instances))
 
