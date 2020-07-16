@@ -61,6 +61,10 @@ flags.DEFINE_bool(
     "semantic information.")
 
 flags.DEFINE_bool(
+    "stochastic_tokens", False,
+    "Sample the SentencePiece encoding instead of taking Viterbi encoding.")
+
+flags.DEFINE_bool(
     "do_whole_word_mask", True,
     "Whether to use whole word masking rather than per-WordPiece masking.")
 
@@ -642,7 +646,7 @@ def main(_):
 
   tokenizer = tokenization.FullTokenizer(
       vocab_file=FLAGS.vocab_file, do_lower_case=FLAGS.do_lower_case,
-      spm_model_file=FLAGS.spm_model_file)
+      sample=FLAGS.stochastic_tokens, spm_model_file=FLAGS.spm_model_file)
 
   input_files = []
   for input_pattern in FLAGS.input_file.split(","):

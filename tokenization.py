@@ -29,7 +29,8 @@ import tensorflow_hub as hub
 import sentencepiece as spm
 
 SPIECE_UNDERLINE = u"▁".encode("utf-8")
-
+nbest_sample = 64
+alpha_sample = 0.1
 
 def preprocess_text(inputs, remove_space=True, lower=False, keep_accents=False):
   """preprocess data by removing extra space and normalize data."""
@@ -61,7 +62,7 @@ def encode_pieces(sp_model, text, return_unicode=True, sample=False):
   if not sample:
     pieces = sp_model.EncodeAsPieces(text)
   else:
-    pieces = sp_model.SampleEncodeAsPieces(text, 64, 0.1)
+    pieces = sp_model.SampleEncodeAsPieces(text, nbest_sample, alpha_sample)
   new_pieces = []
   for piece in pieces:
     piece = printable_text(piece)
@@ -181,7 +182,7 @@ def whitespace_tokenize(text):
 class FullTokenizer(object):
   """Runs end-to-end tokenziation."""
 
-  def __init__(self, vocab_file, do_lower_case=True, spm_model_file=None):
+  def __init__(self, vocab_file, do_lower_case=True, sample=False, spm_model_file=None):
     self.vocab = None
     self.sp_model = None
     if spm_model_file:
@@ -194,6 +195,7 @@ class FullTokenizer(object):
       # generating a vocabulary for the sentence piece tokenizer.
       self.vocab = {self.sp_model.IdToPiece(i): i for i
                     in range(self.sp_model.GetPieceSize())}
+      self.sample = sample
     else:
       self.vocab = load_vocab(vocab_file)
       self.basic_tokenizer = BasicTokenizer(do_lower_case=do_lower_case)
@@ -201,8 +203,8 @@ class FullTokenizer(object):
     self.inv_vocab = {v: k for k, v in self.vocab.items()}
 
   @classmethod
-  def from_scratch(cls, vocab_file, do_lower_case, spm_model_file):
-    return FullTokenizer(vocab_file, do_lower_case, spm_model_file)
+  def from_scratch(cls, vocab_file, do_lower_case, sample, spm_model_file):
+    return FullTokenizer(vocab_file, do_lower_case, sample, spm_model_file)
 
   @classmethod
   def from_hub_module(cls, hub_module, use_spm=True):
@@ -219,12 +221,13 @@ class FullTokenizer(object):
       spm_model_file = vocab_file
       vocab_file = None
     return FullTokenizer(
-        vocab_file=vocab_file, do_lower_case=do_lower_case,
+        vocab_file=vocab_file, do_lower_case=do_lower_case, sample=False,
         spm_model_file=spm_model_file)
 
   def tokenize(self, text):
     if self.sp_model:
-      split_tokens = encode_pieces(self.sp_model, text, return_unicode=False)
+      split_tokens = encode_pieces(self.sp_model, text, return_unicode=False,
+          sample=self.sample)
     else:
       split_tokens = []
       for token in self.basic_tokenizer.tokenize(text):
