@@ -13,3 +13,5 @@ dependencies:
     - google-api-python-client
     - oauth2client
     - transformers
+    - tqdm
+    - colorama

@@ -26,6 +26,8 @@ import numpy as np
 import six
 from six.moves import range
 from six.moves import zip
+from tqdm import tqdm
+from itertools import product
 import tensorflow.compat.v1 as tf
 
 flags = tf.flags
@@ -109,8 +111,8 @@ flags.DEFINE_float(
     "Probability of creating sequences which are shorter than the "
     "maximum length.")
 
-flags.DEFINE_float("shuffle_examples", True,
-                   "Whether to shuffle the output examples.")
+flags.DEFINE_bool("shuffle_examples", True,
+                  "Whether to shuffle the output examples.")
 
 
 class TrainingInstance(object):
@@ -275,18 +277,18 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
 
   vocab_words = list(tokenizer.vocab.keys())
   instances = []
-  for _ in range(dupe_factor):
-    if offset <= 0:
+  for document_index in tqdm(range(len(all_documents)), desc="document"):
+    doc_len = len(all_documents[document_index])
+    if offset_stride <= 0:
       offset_range = range(1)
     else:
-      offset_range = range(0, max_seq_length, offset_stride)
-    for offset in offset_range:
-      for document_index in range(len(all_documents)):
-        instances.extend(
-            create_instances_from_document(
-                all_documents, document_index, offset, max_seq_length,
-                short_seq_prob, masked_lm_prob, max_predictions_per_seq,
-                vocab_words, rng))
+      offset_range = range(0, doc_len, offset_stride)
+    for _, offset in product(range(dupe_factor), offset_range):
+      instances.extend(
+          create_instances_from_document(
+              all_documents, document_index, offset, max_seq_length,
+              short_seq_prob, masked_lm_prob, max_predictions_per_seq,
+              vocab_words, rng))
 
   if FLAGS.shuffle_examples:
     rng.shuffle(instances)
