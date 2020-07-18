@@ -27,7 +27,6 @@ import six
 from six.moves import range
 from six.moves import zip
 from tqdm import tqdm
-from itertools import product
 import tensorflow.compat.v1 as tf
 
 flags = tf.flags
@@ -85,11 +84,17 @@ flags.DEFINE_bool(
     "sentences from other random documents.")
 
 flags.DEFINE_integer(
-    "offset_stride", 0,
+    "offset_stride", 3,
     "Stride to take when offsetting into a document to generate different "
-    "slices of sentences. Part of data augmentation. Adjust dupe_factor to "
-    "compensate for this. Roughly speaking dupe_factor * offset_stride should "
-    "be kept constant. If set to <=0 then no offsetting is performed.")
+    "slices of sentences. Part of data augmentation. Defaults to 3.")
+
+flags.DEFINE_integer(
+    "offset_steps", 0,
+    "Number of offset steps to take of stride offset_stride, to generate "
+    "different slices of sentences. Part of data augmentation. Adjust "
+    "dupe_factor to compensate for this. Roughly speaking dupe_factor * "
+    "offset_steps should be kept constant. If set to <=0 then no offsetting "
+    "is performed. Defaults to 0.")
 
 flags.DEFINE_integer("max_seq_length", 512, "Maximum sequence length.")
 
@@ -238,8 +243,9 @@ def create_float_feature(values):
 
 
 def create_training_instances(input_files, tokenizer, max_seq_length,
-                              offset_stride, dupe_factor, short_seq_prob,
-                              masked_lm_prob, max_predictions_per_seq, rng):
+                              offset_steps, offset_stride, dupe_factor,
+                              short_seq_prob, masked_lm_prob,
+                              max_predictions_per_seq, rng):
   """Create `TrainingInstance`s from raw text."""
   all_documents = [[]]
 
@@ -277,18 +283,16 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
 
   vocab_words = list(tokenizer.vocab.keys())
   instances = []
-  for document_index in tqdm(range(len(all_documents)), desc="document"):
+  for document_index in tqdm(range(len(all_documents))):
     doc_len = len(all_documents[document_index])
-    if offset_stride <= 0:
-      offset_range = range(1)
-    else:
-      offset_range = range(0, doc_len, offset_stride)
-    for _, offset in product(range(dupe_factor), offset_range):
-      instances.extend(
-          create_instances_from_document(
-              all_documents, document_index, offset, max_seq_length,
-              short_seq_prob, masked_lm_prob, max_predictions_per_seq,
-              vocab_words, rng))
+    for _ in range(dupe_factor):
+      for offset in range(0, min(offset_steps, doc_len // offset_stride)):
+        offset = offset * offset_stride
+        instances.extend(
+            create_instances_from_document(
+                all_documents, document_index, offset, max_seq_length,
+                short_seq_prob, masked_lm_prob, max_predictions_per_seq,
+                vocab_words, rng))
 
   if FLAGS.shuffle_examples:
     rng.shuffle(instances)
@@ -665,9 +669,9 @@ def main(_):
 
   rng = random.Random(FLAGS.random_seed)
   instances = create_training_instances(
-      input_files, tokenizer, FLAGS.max_seq_length, FLAGS.offset_stride,
-      FLAGS.dupe_factor, FLAGS.short_seq_prob, FLAGS.masked_lm_prob,
-      FLAGS.max_predictions_per_seq, rng)
+      input_files, tokenizer, FLAGS.max_seq_length, FLAGS.offset_steps,
+      FLAGS.offset_stride, FLAGS.dupe_factor, FLAGS.short_seq_prob,
+      FLAGS.masked_lm_prob, FLAGS.max_predictions_per_seq, rng)
 
   tf.logging.info("number of instances: %i", len(instances))
 
