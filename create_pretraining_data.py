@@ -161,7 +161,7 @@ def write_instance_to_example_files(instances, tokenizer, max_seq_length,
   writer_index = 0
 
   total_written = 0
-  for (inst_index, instance) in enumerate(instances):
+  for (inst_index, instance) in tqdm(enumerate(instances), desc="writing"):
     input_ids = tokenizer.convert_tokens_to_ids(instance.tokens)
     input_mask = [1] * len(input_ids)
     segment_ids = list(instance.segment_ids)
@@ -283,7 +283,7 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
 
   vocab_words = list(tokenizer.vocab.keys())
   instances = []
-  for document_index in tqdm(range(len(all_documents))):
+  for document_index in tqdm(range(len(all_documents)), desc="masking"):
     doc_len = len(all_documents[document_index])
     for _ in range(dupe_factor):
       for offset in range(0, min(offset_steps, doc_len // offset_stride)):
