@@ -83,6 +83,9 @@ flags.DEFINE_integer("num_warmup_steps", 3125, "Number of warmup steps.")
 
 flags.DEFINE_integer("start_warmup_step", 0, "The starting step of warmup.")
 
+flags.DEFINE_integer("save_summary_steps", 1000,
+                     "How often to save the TensorBoard summaries.")
+
 flags.DEFINE_integer("save_checkpoints_steps", 5000,
                      "How often to save the model checkpoint.")
 
@@ -495,6 +498,7 @@ def main(_):
       cluster=tpu_cluster_resolver,
       master=FLAGS.master,
       model_dir=FLAGS.output_dir,
+      save_summary_steps=FLAGS.save_summary_steps,
       save_checkpoints_steps=FLAGS.save_checkpoints_steps,
       keep_checkpoint_max=FLAGS.keep_checkpoint_max,
       tpu_config=contrib_tpu.TPUConfig(
