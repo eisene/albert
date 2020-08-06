@@ -20,6 +20,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
 import collections
 import unicodedata
 import six
@@ -31,6 +32,12 @@ import sentencepiece as spm
 SPIECE_UNDERLINE = u"▁".encode("utf-8")
 nbest_sample = 64
 alpha_sample = 0.1
+
+presplit_chars = None
+if os.path.isfile('presplit_chars.txt'):
+  with open('presplit_chars.txt', mode='r', encoding='utf-8') as f:
+    presplit_chars = list(f)
+  presplit_chars = [c[:-1] for c in presplit_chars if len(c) > 1]
 
 def preprocess_text(inputs, remove_space=True, lower=False, keep_accents=False):
   """preprocess data by removing extra space and normalize data."""
@@ -59,10 +66,15 @@ def encode_pieces(sp_model, text, return_unicode=True, sample=False):
   if six.PY2 and isinstance(text, six.text_type):
     text = six.ensure_binary(text, "utf-8")
 
+  if presplit_chars is not None:
+    for c in presplit_chars:
+      text = text.replace(c, c + '\u2400')
   if not sample:
     pieces = sp_model.EncodeAsPieces(text)
   else:
     pieces = sp_model.SampleEncodeAsPieces(text, nbest_sample, alpha_sample)
+  if presplit_chars is not None:
+    pieces = [piece for piece in pieces if not piece == '\u2400']
   new_pieces = []
   for piece in pieces:
     piece = printable_text(piece)
